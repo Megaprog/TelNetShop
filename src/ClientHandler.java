@@ -1,14 +1,17 @@
+import store.ConnectionExecutor;
 import store.ConnectionWorker;
 import store.Item;
+import store.Storage;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
+import java.math.BigDecimal;
 import java.net.Socket;
+import java.sql.*;
 import java.util.Map;
 import java.util.Scanner;
-import java.util.Set;
 
 /**
  * User: Tomas
@@ -17,13 +20,22 @@ import java.util.Set;
  * To change this template use File | Settings | File Templates.
  */
 public class ClientHandler implements Runnable {
-    private static volatile int counter = 0;
+
+    //commands
+    public static final String LOGIN =    "login";
+    public static final String LOGOUT =   "logout";
+    public static final String VIEWSHOP = "view-shop";
+    public static final String MYINFO =   "my-info";
+    public static final String BUY =      "buy";
+    public static final String SELL =     "sell";
+    public static final String EXIT =     "exit";
+
     private Socket incoming;
-    private Set<String> players;
+    private Map<String, Boolean> players;
     private Map<String, Item> items;
     private ConnectionWorker connWorker;
 
-	public ClientHandler(Socket incoming, Set<String> players, Map<String, Item> items, ConnectionWorker connWorker) {
+	public ClientHandler(Socket incoming, Map<String, Boolean> players, Map<String, Item> items, ConnectionWorker connWorker) {
 		super();
 		this.incoming = incoming;
         this.players = players;
@@ -31,35 +43,150 @@ public class ClientHandler implements Runnable {
         this.connWorker = connWorker;
 	}
 
-	@Override
+    protected String loginName;
+    protected PrintWriter out;
+
+    @Override
 	public void run() {
 		try {
+
 			try {
 				InputStream inStream = incoming.getInputStream();
 				OutputStream outStream = incoming.getOutputStream();
 				Scanner in = new Scanner(inStream);
-				PrintWriter out = new PrintWriter(outStream, true);
-				
-				counter++;
-				System.out.println("Thread "+counter+" opened");
-				
-				out.println("Hello! Enter BYE to exit.");
-				boolean done=false;
+				out = new PrintWriter(outStream, true);
+
+				out.println("Hello! Enter EXIT to exit.");
+				boolean done = false;
 				
 				while (!done && in.hasNextLine()) {
-					String line = in.nextLine();
-					out.println("Echo: "+line);
-					if (line.trim().equalsIgnoreCase("bye"))
-						done=true;
-				}
+					String command = in.nextLine().trim();
+					//out.println("Echo: " + command);
+
+                    //handle commands
+					if (command.equalsIgnoreCase(EXIT)) {
+                        out.println("disconnected");
+                        done = true;
+                    }
+                    else if (command.regionMatches(true, 0, LOGIN, 0, LOGIN.length())) {
+                        login(command.substring(command.length() <= LOGIN.length() ? command.length() : LOGIN.length() + 1));
+                    }
+                    else if (command.equalsIgnoreCase(LOGOUT)) {
+                        logout();
+                    }
+                    else if (command.equalsIgnoreCase(VIEWSHOP)) {
+                        viewshop();
+                    }
+                    else if (command.equalsIgnoreCase(MYINFO)) {
+                        myinfo();
+                    }
+                    else if (command.regionMatches(true, 0, BUY, 0, BUY.length())) {
+                        buy(command.substring(command.length() <= BUY.length() ? command.length() : BUY.length() + 1));
+                    }
+                    else if (command.regionMatches(true, 0, SELL, 0, SELL.length())) {
+                        sell(command.substring(command.length() <= SELL.length() ? command.length() : SELL.length() + 1));
+                    }
+                    else {
+                        out.println("command '" + command + "' is not recognized");
+                    }
+                }
 				
 			} finally {
-				System.out.println("Thread "+counter+" closed");
-				counter--;
 				incoming.close();
 			}
+
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
 	}
+
+    protected void login(String args) {
+        //check if we are logged in
+        if (loginName == null) {
+            synchronized (players) {
+                Boolean isLogged = players.get(args);
+                //if name is not found
+                if (isLogged == null) {
+                    out.println("The name '" + args + "' is not found in players table");
+                }
+                else if (isLogged) {
+                    out.println("User with name '" + args + "' is logged in before");
+                }
+                else {
+                    loginName = args;
+                    players.put(loginName, true);
+                    out.println("You are logged in as '" + loginName + "'");
+                }
+            }
+        }
+        else {
+            out.println("You are already login with the name " + loginName + ". Logout first");
+        }
+    }
+
+    protected void logout() {
+        //check if we are logged in
+        if (loginName != null) {
+            synchronized (players) {
+                players.put(loginName, false);
+                loginName = null;
+                out.println("You are logged out");
+            }
+        }
+        else {
+            out.println("You are not logged in");
+        }
+    }
+
+    protected void viewshop() {
+        out.println("Items in the shop:");
+        for (Item item : items.values()) {
+            out.println(item.getName() + " " + item.getCost());
+        }
+    }
+
+    protected BigDecimal money;
+
+    protected void myinfo() {
+        //check if we are logged in
+        if (loginName == null) {
+            out.println("You are not logged in");
+        }
+        else {
+            connWorker.executeWithConnection(new ConnectionExecutor() {
+                @Override
+                public void execute(Connection conn) {
+                    PreparedStatement pstmt = null;
+                    ResultSet rs = null;
+                    try {
+                        pstmt = conn.prepareStatement("SELECT cost FROM players WHERE name = ?");
+                        pstmt.setString(1, loginName);
+                        rs = pstmt.executeQuery();
+                        while (rs.next()) {
+                            money = rs.getBigDecimal(1);
+                        }
+                    } catch (SQLException ex) {
+                        Storage.handleSQLException(ex);
+                    } finally {
+                        if (pstmt != null) {
+                            try {
+                                pstmt.close();
+                            } catch (SQLException ex) {
+                                Storage.handleSQLException(ex);
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        out.println(loginName + " " + money);
+        out.println("Your items are:");
+    }
+
+    protected void buy(String args) {
+    }
+
+    protected void sell(String args) {
+    }
 }

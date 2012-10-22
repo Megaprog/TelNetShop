@@ -1,8 +1,6 @@
-import proba.ThreadEchoHandler;
 import store.ConnectionProvider;
 import store.Item;
 import store.Storage;
-import util.Supplier;
 
 import java.io.File;
 import java.io.IOException;
@@ -12,7 +10,6 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.Map;
-import java.util.Set;
 
 /**
  * User: Tomas
@@ -55,7 +52,7 @@ public class Main {
         });
 
         //load players
-        Set<String> players = storage.loadPlayers();
+        Map<String, Boolean> players = storage.loadPlayers();
         //load items
         Map<String, Item> items = storage.loadItems();
 
@@ -67,7 +64,7 @@ public class Main {
                 Socket incoming = s.accept();
                 //System.out.println("Spawning "+i);
 
-                Runnable r = new ClientHandler(incoming, players, items, storage.getWorker());
+                Runnable r = new ClientHandler(incoming, players, items, storage.getConnectionWorker());
                 Thread t = new Thread(r);
                 t.start();
                 i++;

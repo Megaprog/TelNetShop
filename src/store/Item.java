@@ -48,7 +48,7 @@ public class Item {
 
     @Override
     public String toString() {
-        return "store.Item{" +
+        return "Item{" +
                 "name='" + name + '\'' +
                 ", cost=" + cost +
                 '}';

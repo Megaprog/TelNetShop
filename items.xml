@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<items>
+
+    <item>
+        <name>weapon</name>
+        <cost>100</cost>
+    </item>
+    <item>
+        <name>armor</name>
+        <cost>200</cost>
+    </item>
+
+</items>
