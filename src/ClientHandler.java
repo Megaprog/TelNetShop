@@ -7,8 +7,10 @@ import java.io.PrintWriter;
 import java.math.BigDecimal;
 import java.net.Socket;
 import java.sql.*;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.Set;
 
 /**
  * User: Tomas
@@ -143,6 +145,7 @@ public class ClientHandler implements Runnable {
     }
 
     protected BigDecimal money;
+    protected Set<String> playerItems;
 
     protected void myinfo() {
         //check if we are logged in
@@ -167,8 +170,29 @@ public class ClientHandler implements Runnable {
                   }
             });
 
+            playerItems = new HashSet<String>();
+            statementWorker.executeWithStatement(new StatementProvider() {
+                @Override
+                public Statement getStatement(Connection conn) throws SQLException {
+                    return conn.prepareStatement("SELECT item_name FROM player_items WHERE player_name = ?");
+                }
+            }, new StatementExecutor() {
+                 @Override
+                 public void execute(Connection conn, Statement statement) throws SQLException {
+                     PreparedStatement pstmt = (PreparedStatement) statement;
+                     pstmt.setString(1, loginName);
+                     ResultSet rs = pstmt.executeQuery();
+                     while (rs.next()) {
+                         playerItems.add(rs.getString(1));
+                     }
+                 }
+            });
+
             out.println(loginName + " " + money);
             out.println("Your items are:");
+            for (String itemName : playerItems) {
+                out.println(itemName);
+            }
         }
     }
 
