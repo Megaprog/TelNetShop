@@ -247,6 +247,7 @@ public class ClientHandler implements Runnable {
                                 try {
                                     insertItem.executeUpdate();
                                     updateMoney.executeUpdate();
+                                    conn.commit();
                                 }
                                 catch (SQLException ex) {
                                     conn.rollback();
@@ -300,6 +301,7 @@ public class ClientHandler implements Runnable {
                             try {
                                 deleteItem.executeUpdate();
                                 updateMoney.executeUpdate();
+                                conn.commit();
                             }
                             catch (SQLException ex) {
                                 conn.rollback();
