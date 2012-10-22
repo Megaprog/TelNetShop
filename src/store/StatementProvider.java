@@ -1,5 +1,6 @@
 package store;
 
+import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
 
@@ -11,5 +12,5 @@ import java.sql.Statement;
  */
 public interface StatementProvider {
 
-    Statement getStatement() throws SQLException;
+    Statement getStatement(Connection conn) throws SQLException;
 }

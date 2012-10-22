@@ -64,7 +64,7 @@ public class Main {
                 Socket incoming = s.accept();
                 //System.out.println("Spawning "+i);
 
-                Runnable r = new ClientHandler(incoming, players, items, storage.getConnectionWorker());
+                Runnable r = new ClientHandler(incoming, players, items, storage.getStatementWorker());
                 Thread t = new Thread(r);
                 t.start();
                 i++;

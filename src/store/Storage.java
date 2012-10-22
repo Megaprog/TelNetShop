@@ -23,6 +23,7 @@ public class Storage {
     private final File itemsFile;
     private final ConnectionProvider connProvider;
     private final ConnectionWorker connectionWorker;
+    private final StatementWorker statementWorker;
 
     public Storage(final File itemsFile, final ConnectionProvider connProvider) {
         this.itemsFile = itemsFile;
@@ -52,41 +53,61 @@ public class Storage {
                 }
             }
         };
+
+        this.statementWorker = new StatementWorker() {
+            @Override
+            public void executeWithStatement(final StatementProvider statementProvider, final StatementExecutor statementExecutor) {
+                getConnectionWorker().executeWithConnection(new ConnectionExecutor() {
+                    @Override
+                    public void execute(Connection conn) {
+                        Statement stmt = null;
+                        try {
+                            stmt = statementProvider.getStatement(conn);
+                            statementExecutor.execute(conn, stmt);
+                        }
+                        catch (SQLException ex){
+                            handleSQLException(ex);
+                        }
+                        finally {
+                            if (stmt != null) {
+                                try {
+                                    stmt.close();
+                                }
+                                catch (SQLException ex) {
+                                    handleSQLException(ex);
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+        };
     }
 
     public ConnectionWorker getConnectionWorker() {
         return connectionWorker;
     }
 
+    public StatementWorker getStatementWorker() {
+        return statementWorker;
+    }
+
     public Map<String, Boolean> loadPlayers() {
         final Map<String, Boolean> players = new HashMap<String, Boolean>();
 
-        getConnectionWorker().executeWithConnection(new ConnectionExecutor() {
-            @Override
-            public void execute(Connection conn) {
-                Statement stmt = null;
-                ResultSet rs = null;
-                try {
-                    stmt = conn.createStatement();
-                    rs = stmt.executeQuery("SELECT name FROM players");
+        getStatementWorker().executeWithStatement(new StatementProvider() {
+                @Override
+                public Statement getStatement(Connection conn) throws SQLException {
+                    return conn.createStatement();
+                }
+            }, new StatementExecutor() {
+                @Override
+                public void execute(Connection conn, Statement statement) throws SQLException{
+                    ResultSet rs = statement.executeQuery("SELECT name FROM players");
                     while (rs.next()) {
                         players.put(rs.getString(1), false);
                     }
                 }
-                catch (SQLException ex){
-                    handleSQLException(ex);
-                }
-                finally {
-                    if (stmt != null) {
-                        try {
-                            stmt.close();
-                        }
-                        catch (SQLException ex) {
-                            handleSQLException(ex);
-                        }
-                    }
-                }
-            }
         });
 
         return players;

@@ -1,6 +1,7 @@
 package store;
 
 import java.sql.Connection;
+import java.sql.SQLException;
 import java.sql.Statement;
 
 /**
@@ -11,5 +12,5 @@ import java.sql.Statement;
  */
 public interface StatementExecutor {
 
-    void execute(Connection conn, Statement statement);
+    void execute(Connection conn, Statement statement)  throws SQLException;
 }

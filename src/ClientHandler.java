@@ -1,7 +1,4 @@
-import store.ConnectionExecutor;
-import store.ConnectionWorker;
-import store.Item;
-import store.Storage;
+import store.*;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -33,14 +30,14 @@ public class ClientHandler implements Runnable {
     private Socket incoming;
     private Map<String, Boolean> players;
     private Map<String, Item> items;
-    private ConnectionWorker connWorker;
+    private StatementWorker statementWorker;
 
-	public ClientHandler(Socket incoming, Map<String, Boolean> players, Map<String, Item> items, ConnectionWorker connWorker) {
+	public ClientHandler(Socket incoming, Map<String, Boolean> players, Map<String, Item> items, StatementWorker statementWorker) {
 		super();
 		this.incoming = incoming;
         this.players = players;
         this.items = items;
-        this.connWorker = connWorker;
+        this.statementWorker = statementWorker;
 	}
 
     protected String loginName;
@@ -153,35 +150,26 @@ public class ClientHandler implements Runnable {
             out.println("You are not logged in");
         }
         else {
-            connWorker.executeWithConnection(new ConnectionExecutor() {
-                @Override
-                public void execute(Connection conn) {
-                    PreparedStatement pstmt = null;
-                    ResultSet rs = null;
-                    try {
-                        pstmt = conn.prepareStatement("SELECT cost FROM players WHERE name = ?");
-                        pstmt.setString(1, loginName);
-                        rs = pstmt.executeQuery();
-                        while (rs.next()) {
-                            money = rs.getBigDecimal(1);
-                        }
-                    } catch (SQLException ex) {
-                        Storage.handleSQLException(ex);
-                    } finally {
-                        if (pstmt != null) {
-                            try {
-                                pstmt.close();
-                            } catch (SQLException ex) {
-                                Storage.handleSQLException(ex);
-                            }
-                        }
-                    }
-                }
+            statementWorker.executeWithStatement(new StatementProvider() {
+                  @Override
+                  public Statement getStatement(Connection conn) throws SQLException {
+                      return conn.prepareStatement("SELECT money FROM players WHERE name = ?");
+                  }
+              }, new StatementExecutor() {
+                  @Override
+                  public void execute(Connection conn, Statement statement) throws SQLException{
+                      PreparedStatement pstmt = (PreparedStatement) statement;
+                      pstmt.setString(1, loginName);
+                      ResultSet rs = pstmt.executeQuery();
+                      while (rs.next()) {
+                          money = rs.getBigDecimal(1);
+                      }
+                  }
             });
-        }
 
-        out.println(loginName + " " + money);
-        out.println("Your items are:");
+            out.println(loginName + " " + money);
+            out.println("Your items are:");
+        }
     }
 
     protected void buy(String args) {
