@@ -1,8 +1,18 @@
 import proba.ThreadEchoHandler;
+import store.ConnectionProvider;
+import store.Item;
+import store.Storage;
+import util.Supplier;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+import java.util.Map;
+import java.util.Set;
 
 /**
  * User: Tomas
@@ -13,13 +23,41 @@ import java.net.Socket;
 public class Main {
 
     public static int PORT = 8080;
+    public static String CONNSTRING = "jdbc:mysql://localhost/test?user=root&password=root";
+    public static String ITEMSXMLNAME = "items.xml";
 
     public static void main(String[] args) {
+        //init parameters
         int port = PORT;
-        //try to get port from parameters
         if (args.length > 0) {
             port = Integer.valueOf(args[0]);
         }
+        String connString = CONNSTRING;
+        if (args.length > 1) {
+            connString = args[1];
+        }
+        String itemsXMLName = ITEMSXMLNAME;
+        if (args.length > 2) {
+            itemsXMLName = args[2];
+        }
+
+        System.out.println("Port=" + port);
+        System.out.println("Connection string=" + connString);
+        System.out.println("Items file name=" + itemsXMLName);
+
+        //creating Storage
+        final String finalConnString = connString;
+        Storage storage = new Storage(new File(itemsXMLName), new ConnectionProvider() {
+            @Override
+            public Connection getConnection() throws SQLException {
+                return DriverManager.getConnection(finalConnString);
+            }
+        });
+
+        //load players
+        Set<String> players = storage.loadPlayers();
+        //load items
+        Map<String, Item> items = storage.loadItems();
 
         try {
             int i=1;
@@ -29,7 +67,7 @@ public class Main {
                 Socket incoming = s.accept();
                 //System.out.println("Spawning "+i);
 
-                Runnable r = new ClientHandler(incoming);
+                Runnable r = new ClientHandler(incoming, players, items, storage.getWorker());
                 Thread t = new Thread(r);
                 t.start();
                 i++;

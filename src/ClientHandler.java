@@ -1,9 +1,14 @@
+import store.ConnectionWorker;
+import store.Item;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.net.Socket;
+import java.util.Map;
 import java.util.Scanner;
+import java.util.Set;
 
 /**
  * User: Tomas
@@ -12,12 +17,18 @@ import java.util.Scanner;
  * To change this template use File | Settings | File Templates.
  */
 public class ClientHandler implements Runnable {
-	private Socket incoming;
-	private static volatile int counter = 0;
+    private static volatile int counter = 0;
+    private Socket incoming;
+    private Set<String> players;
+    private Map<String, Item> items;
+    private ConnectionWorker connWorker;
 
-	public ClientHandler(Socket incoming) {
+	public ClientHandler(Socket incoming, Set<String> players, Map<String, Item> items, ConnectionWorker connWorker) {
 		super();
 		this.incoming = incoming;
+        this.players = players;
+        this.items = items;
+        this.connWorker = connWorker;
 	}
 
 	@Override
