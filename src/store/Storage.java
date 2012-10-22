@@ -21,13 +21,11 @@ import java.util.*;
 public class Storage {
 
     private final File itemsFile;
-    private final ConnectionProvider connProvider;
     private final ConnectionWorker connectionWorker;
     private final StatementWorker statementWorker;
 
     public Storage(final File itemsFile, final ConnectionProvider connProvider) {
         this.itemsFile = itemsFile;
-        this.connProvider = connProvider;
 
         this.connectionWorker = new ConnectionWorker() {
             @Override
@@ -42,7 +40,11 @@ public class Storage {
 
                 //execute something
                 if (conn != null) {
-                    executor.execute(conn);
+                    try {
+                        executor.execute(conn);
+                    } catch (SQLException ex) {
+                        handleSQLException(ex);
+                    }
 
                     //close db
                     try {

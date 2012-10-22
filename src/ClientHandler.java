@@ -29,16 +29,18 @@ public class ClientHandler implements Runnable {
     public static final String SELL =     "sell";
     public static final String EXIT =     "exit";
 
-    private Socket incoming;
-    private Map<String, Boolean> players;
-    private Map<String, Item> items;
-    private StatementWorker statementWorker;
+    protected Socket incoming;
+    protected Map<String, Boolean> players;
+    protected Map<String, Item> items;
+    protected ConnectionWorker connectionWorker;
+    protected StatementWorker statementWorker;
 
-	public ClientHandler(Socket incoming, Map<String, Boolean> players, Map<String, Item> items, StatementWorker statementWorker) {
+	public ClientHandler(Socket incoming, Map<String, Boolean> players, Map<String, Item> items, ConnectionWorker connectionWorker, StatementWorker statementWorker) {
 		super();
 		this.incoming = incoming;
         this.players = players;
         this.items = items;
+        this.connectionWorker = connectionWorker;
         this.statementWorker = statementWorker;
 	}
 
@@ -153,40 +155,8 @@ public class ClientHandler implements Runnable {
             out.println("You are not logged in");
         }
         else {
-            statementWorker.executeWithStatement(new StatementProvider() {
-                  @Override
-                  public Statement getStatement(Connection conn) throws SQLException {
-                      return conn.prepareStatement("SELECT money FROM players WHERE name = ?");
-                  }
-              }, new StatementExecutor() {
-                  @Override
-                  public void execute(Connection conn, Statement statement) throws SQLException{
-                      PreparedStatement pstmt = (PreparedStatement) statement;
-                      pstmt.setString(1, loginName);
-                      ResultSet rs = pstmt.executeQuery();
-                      while (rs.next()) {
-                          money = rs.getBigDecimal(1);
-                      }
-                  }
-            });
-
-            playerItems = new HashSet<String>();
-            statementWorker.executeWithStatement(new StatementProvider() {
-                @Override
-                public Statement getStatement(Connection conn) throws SQLException {
-                    return conn.prepareStatement("SELECT item_name FROM player_items WHERE player_name = ?");
-                }
-            }, new StatementExecutor() {
-                 @Override
-                 public void execute(Connection conn, Statement statement) throws SQLException {
-                     PreparedStatement pstmt = (PreparedStatement) statement;
-                     pstmt.setString(1, loginName);
-                     ResultSet rs = pstmt.executeQuery();
-                     while (rs.next()) {
-                         playerItems.add(rs.getString(1));
-                     }
-                 }
-            });
+            queryMoney();
+            queryItems();
 
             out.println(loginName + " " + money);
             out.println("Your items are:");
@@ -196,9 +166,156 @@ public class ClientHandler implements Runnable {
         }
     }
 
+    protected BigDecimal queryMoney() {
+        statementWorker.executeWithStatement(new StatementProvider() {
+             @Override
+             public Statement getStatement(Connection conn) throws SQLException {
+                 return conn.prepareStatement("SELECT money FROM players WHERE name = ?");
+             }
+        }, new StatementExecutor() {
+             @Override
+             public void execute(Connection conn, Statement statement) throws SQLException{
+                 PreparedStatement pstmt = (PreparedStatement) statement;
+                 pstmt.setString(1, loginName);
+                 ResultSet rs = pstmt.executeQuery();
+                 while (rs.next()) {
+                     money = rs.getBigDecimal(1);
+                 }
+             }
+        });
+
+        return money;
+    }
+
+    protected Set<String> queryItems() {
+        playerItems = new HashSet<String>();
+        statementWorker.executeWithStatement(new StatementProvider() {
+             @Override
+             public Statement getStatement(Connection conn) throws SQLException {
+                 return conn.prepareStatement("SELECT item_name FROM player_items WHERE player_name = ?");
+             }
+        }, new StatementExecutor() {
+             @Override
+             public void execute(Connection conn, Statement statement) throws SQLException {
+                 PreparedStatement pstmt = (PreparedStatement) statement;
+                 pstmt.setString(1, loginName);
+                 ResultSet rs = pstmt.executeQuery();
+                 while (rs.next()) {
+                     playerItems.add(rs.getString(1));
+                 }
+             }
+        });
+
+        return playerItems;
+    }
+
     protected void buy(String args) {
+        //check if we are logged in
+        if (loginName == null) {
+            out.println("You are not logged in");
+        }
+        else {
+            //check item available
+            final Item item = items.get(args);
+            if (item == null) {
+                out.println("The item '" + args + "' is not exists");
+            }
+            else {
+                //check if we already have the item
+                queryItems();
+                if (playerItems.contains(args)) {
+                    out.println("You are already have the " + item.getName());
+                }
+                else {
+                    //check if we have enough money
+                    queryMoney();
+                    if (money.compareTo(item.getCost()) == -1) {
+                        out.println("You have not enough money to buy the " + item.getName());
+                    }
+                    else {
+                        connectionWorker.executeWithConnection(new ConnectionExecutor() {
+                            @Override
+                            public void execute(Connection conn) throws SQLException{
+                                conn.setAutoCommit(false);
+                                PreparedStatement insertItem = conn.prepareStatement("INSERT INTO player_items(player_name, item_name) VALUES (?, ?)");
+                                insertItem.setString(1, loginName);
+                                insertItem.setString(2, item.getName());
+                                PreparedStatement updateMoney = conn.prepareStatement("UPDATE players SET money = ? WHERE name = ?");
+                                updateMoney.setBigDecimal(1, money.subtract(item.getCost()));
+                                updateMoney.setString(2, loginName);
+                                //make two updates in one transaction
+                                try {
+                                    insertItem.executeUpdate();
+                                    updateMoney.executeUpdate();
+                                }
+                                catch (SQLException ex) {
+                                    conn.rollback();
+                                    throw ex;
+                                }
+                                finally {
+                                    insertItem.close();
+                                    updateMoney.close();
+                                    conn.setAutoCommit(true);
+                                }
+                            }
+                        });
+                        queryMoney();
+                        out.println("You buy the '" + item.getName() + "' for " + item.getCost() + ". Now you have " + money);
+                    }
+                }
+            }
+        }
     }
 
     protected void sell(String args) {
+        //check if we are logged in
+        if (loginName == null) {
+            out.println("You are not logged in");
+        }
+        else {
+            //check item available
+            final Item item = items.get(args);
+            if (item == null) {
+                out.println("The item '" + args + "' is not exists");
+            }
+            else {
+                //check if we already have the item
+                queryItems();
+                if (!playerItems.contains(args)) {
+                    out.println("You have not the " + item.getName());
+                }
+                else {
+                    queryMoney();
+                    connectionWorker.executeWithConnection(new ConnectionExecutor() {
+                        @Override
+                        public void execute(Connection conn) throws SQLException{
+                            conn.setAutoCommit(false);
+                            PreparedStatement deleteItem = conn.prepareStatement("DELETE FROM player_items WHERE player_name = ? and item_name = ?");
+                            deleteItem.setString(1, loginName);
+                            deleteItem.setString(2, item.getName());
+                            PreparedStatement updateMoney = conn.prepareStatement("UPDATE players SET money = ? WHERE name = ?");
+                            updateMoney.setBigDecimal(1, money.add(item.getCost()));
+                            updateMoney.setString(2, loginName);
+                            //make two updates in one transaction
+                            try {
+                                deleteItem.executeUpdate();
+                                updateMoney.executeUpdate();
+                            }
+                            catch (SQLException ex) {
+                                conn.rollback();
+                                throw ex;
+                            }
+                            finally {
+                                deleteItem.close();
+                                updateMoney.close();
+                                conn.setAutoCommit(true);
+                            }
+                        }
+                    });
+                    queryMoney();
+                    out.println("You sell the '" + item.getName() + "' for " + item.getCost() + ". Now you have " + money);
+                }
+            }
+        }
     }
 }

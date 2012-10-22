@@ -57,17 +57,15 @@ public class Main {
         Map<String, Item> items = storage.loadItems();
 
         try {
-            int i=1;
             ServerSocket s = new ServerSocket(port);
 
             while (true) {
                 Socket incoming = s.accept();
                 //System.out.println("Spawning "+i);
 
-                Runnable r = new ClientHandler(incoming, players, items, storage.getStatementWorker());
+                Runnable r = new ClientHandler(incoming, players, items, storage.getConnectionWorker(), storage.getStatementWorker());
                 Thread t = new Thread(r);
                 t.start();
-                i++;
             }
         }
         catch (IOException e) {

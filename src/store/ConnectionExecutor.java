@@ -1,6 +1,7 @@
 package store;
 
 import java.sql.Connection;
+import java.sql.SQLException;
 
 /**
  * User: Tomas
@@ -10,5 +11,5 @@ import java.sql.Connection;
  */
 public interface ConnectionExecutor {
 
-    void execute(Connection conn);
+    void execute(Connection conn) throws SQLException;
 }
